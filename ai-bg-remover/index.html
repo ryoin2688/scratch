@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 圖片去背工具 — 純前端本地運算</title>
+  <meta
+    name="description"
+    content="純前端免後端 AI 圖片去背工具，直接在瀏覽器本地端執行去背，支援原圖對比、多種背景底色檢查與一鍵下載透明 PNG。"
+  />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-badge" aria-hidden="true">AI</div>
+        <div>
+          <h1>純前端圖片去背工具</h1>
+          <p class="subtitle">100% 瀏覽器本地端 AI 去背運算，圖片不上傳至任何伺服器</p>
+        </div>
+      </div>
+      <div class="header-badges">
+        <span class="pill">免後端</span>
+        <span class="pill">支援 PNG / JPG / WebP</span>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Upload Zone -->
+      <section
+        id="drop-zone"
+        class="drop-zone"
+        tabindex="0"
+        role="button"
+        aria-label="點擊或拖曳圖片到此處上傳"
+      >
+        <input
+          id="file-input"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+          hidden
+        />
+        <div class="drop-zone-inner">
+          <div class="upload-icon" aria-hidden="true">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <h2>點擊選擇圖片，或將圖片拖曳至此</h2>
+          <p>支援 PNG、JPG、WebP 格式（亦可直接貼上剪貼簿圖片）</p>
+          <button id="select-file-btn" type="button" class="btn btn-primary">
+            選擇圖片開始去背
+          </button>
+        </div>
+      </section>
+
+      <!-- Error Alert -->
+      <div id="error-banner" class="alert alert-error hidden" role="alert">
+        <span id="error-message"></span>
+        <button id="dismiss-error-btn" type="button" class="alert-close" aria-label="關閉錯誤訊息">&times;</button>
+      </div>
+
+      <!-- Progress Card -->
+      <section id="progress-section" class="progress-card hidden" aria-live="polite">
+        <div class="progress-header">
+          <div>
+            <h3 id="progress-title">正在準備 AI 去背模型…</h3>
+            <p id="progress-detail" class="progress-detail">首次使用將下載模型至瀏覽器快取，後續使用無需重新下載</p>
+          </div>
+          <span id="progress-percent" class="progress-percent">0%</span>
+        </div>
+        <div
+          class="progress-track"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="0"
+          id="progress-bar-role"
+        >
+          <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <div id="progress-meta" class="progress-meta">初始化中…</div>
+      </section>
+
+      <!-- Result & Comparison Workspace -->
+      <section id="workspace" class="workspace hidden">
+        <div class="toolbar">
+          <div class="toolbar-group">
+            <span class="toolbar-label">對比模式</span>
+            <div class="segmented" role="group" aria-label="對比檢視模式">
+              <button type="button" class="seg-btn active" data-view="side-by-side">並排對比</button>
+              <button type="button" class="seg-btn" data-view="slider">滑桿對比</button>
+            </div>
+          </div>
+
+          <div class="toolbar-group">
+            <span class="toolbar-label">去背底色檢查</span>
+            <div class="bg-switcher" role="group" aria-label="去背預覽背景顏色">
+              <button type="button" class="bg-btn active" data-bg="checkerboard" title="灰白透明格紋">
+                <span class="swatch swatch-checker" aria-hidden="true"></span>
+                灰白格紋
+              </button>
+              <button type="button" class="bg-btn" data-bg="white" title="純白底色">
+                <span class="swatch swatch-white" aria-hidden="true"></span>
+                純白底
+              </button>
+              <button type="button" class="bg-btn" data-bg="black" title="純黑底色">
+                <span class="swatch swatch-black" aria-hidden="true"></span>
+                純黑底
+              </button>
+            </div>
+          </div>
+
+          <div class="toolbar-actions">
+            <button id="change-image-btn" type="button" class="btn btn-secondary">
+              更換圖片
+            </button>
+            <button id="download-btn" type="button" class="btn btn-primary" disabled>
+              一鍵下載透明 PNG
+            </button>
+          </div>
+        </div>
+
+        <!-- Side-by-Side Comparison -->
+        <div id="side-by-side-view" class="compare-grid">
+          <article class="preview-card">
+            <header class="preview-card-header">
+              <span>原圖</span>
+              <span id="original-meta" class="meta-text"></span>
+            </header>
+            <div class="preview-stage neutral-stage">
+              <img id="original-img" alt="上傳的原圖預覽" />
+            </div>
+          </article>
+
+          <article class="preview-card">
+            <header class="preview-card-header">
+              <span>去背結果</span>
+              <span id="result-meta" class="meta-text"></span>
+            </header>
+            <div id="result-stage" class="preview-stage bg-checkerboard">
+              <img id="result-img" alt="去背後的透明 PNG 結果預覽" />
+              <div id="result-placeholder" class="stage-placeholder">處理完成後將顯示於此</div>
+            </div>
+          </article>
+        </div>
+
+        <!-- Interactive Split Slider Comparison -->
+        <div id="slider-view" class="slider-card hidden">
+          <div class="preview-card-header">
+            <span>拖曳滑桿即時對比（左：原圖 ／ 右：去背結果）</span>
+            <span id="slider-meta" class="meta-text"></span>
+          </div>
+          <div id="slider-stage" class="slider-stage bg-checkerboard">
+            <img id="slider-result-img" class="slider-img" alt="去背結果" />
+            <div id="slider-original-clip" class="slider-original-clip">
+              <img id="slider-original-img" class="slider-img" alt="原圖" />
+            </div>
+            <div id="slider-divider" class="slider-divider" style="left: 50%;">
+              <div class="slider-handle" aria-hidden="true">&#8596;</div>
+            </div>
+            <input
+              id="compare-range"
+              class="compare-range"
+              type="range"
+              min="0"
+              max="100"
+              value="50"
+              aria-label="原圖與去背結果對比滑桿"
+            />
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>
+        使用
+        <a href="https://www.npmjs.com/package/@imgly/background-removal" target="_blank" rel="noopener noreferrer">
+          @imgly/background-removal
+        </a>
+        於瀏覽器本地端執行 AI 影像分割，無需後端伺服器。
+      </p>
+    </footer>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
